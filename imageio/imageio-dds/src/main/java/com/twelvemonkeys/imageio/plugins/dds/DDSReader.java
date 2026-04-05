@@ -111,6 +111,8 @@ final class DDSReader {
                 return decodeDXT4(width, height, buffer);
             case DXT5:
                 return decodeDXT5(width, height, buffer);
+            case ATI2:
+                return decodeATI2(width, height, buffer);
             case A1R5G5B5:
                 return readA1R5G5B5(width, height, buffer);
             case X1R5G5B5:
@@ -146,6 +148,7 @@ final class DDSReader {
             case DXT3:
             case DXT4:
             case DXT5:
+            case ATI2:
                 return type.blockSize() * ((width + 3) / 4) * ((height + 3) / 4);
             case A1R5G5B5:
             case X1R5G5B5:
@@ -291,6 +294,57 @@ final class DDSReader {
                     pixels[4 * width * i + 4 * j + width * k + 2] = getDXTColor(c0, c1, getDXT5Alpha(a0, a1, alphaTable[4 * k + 2]), t2);
                     if (4 * j + 3 >= width) continue;
                     pixels[4 * width * i + 4 * j + width * k + 3] = getDXTColor(c0, c1, getDXT5Alpha(a0, a1, alphaTable[4 * k + 3]), t3);
+                }
+            }
+        }
+        return pixels;
+    }
+
+    private static int[] decodeATI2(int width, int height, byte[] buffer) {
+        int index = 0;
+        int w = (width + 3) / 4;
+        int h = (height + 3) / 4;
+        int[] pixels = new int[width * height];
+        int[] indexTable = new int[16];
+        for (int i = 0; i < h; i++) {
+            for (int j = 0; j < w; j++) {
+                int r0 = buffer[index++] & 0xFF;
+                int r1 = buffer[index++] & 0xFF;
+                long rBits = 0;
+                for (int k = 0; k < 6; k++) {
+                    rBits |= ((long) (buffer[index++] & 0xFF)) << (8 * k);
+                }
+                int g0 = buffer[index++] & 0xFF;
+                int g1 = buffer[index++] & 0xFF;
+                long gBits = 0;
+                for (int k = 0; k < 6; k++) {
+                    gBits |= ((long) (buffer[index++] & 0xFF)) << (8 * k);
+                }
+                for (int k = 0; k < 16; k++) {
+                    indexTable[k] = (int) ((rBits >> (3 * k)) & 0x7);
+                }
+                int[] rVals = new int[16];
+                for (int k = 0; k < 16; k++) {
+                    rVals[k] = getDXT5Alpha(r0, r1, indexTable[k]);
+                }
+                for (int k = 0; k < 16; k++) {
+                    indexTable[k] = (int) ((gBits >> (3 * k)) & 0x7);
+                }
+                int[] gVals = new int[16];
+                for (int k = 0; k < 16; k++) {
+                    gVals[k] = getDXT5Alpha(g0, g1, indexTable[k]);
+                }
+                for (int y = 0; y < 4; y++) {
+                    if (4 * i + y >= height) break;
+                    for (int x = 0; x < 4; x++) {
+                        if (4 * j + x >= width) break;
+                        int p = 4 * y + x;
+                        int r = rVals[p];
+                        int g = gVals[p];
+                        int b = 0;
+                        int color = (255 << 24) | (r << 16) | (g << 8) | b;
+                        pixels[(4 * i + y) * width + (4 * j + x)] = color;
+                    }
                 }
             }
         }
